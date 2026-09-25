@@ -2,7 +2,7 @@
 
 **日本の温泉を、最も詳しく・再利用可能な形で記録するオープンデータ基盤。**
 
-`bonsai/onsen` は、温泉地・源泉・施設・浴場・泉質・位置・営業状態・歴史・情報源を統合し、**検索できるDB**から**AIが利用できるデータ基盤**までを構築するプロジェクトです。
+`bonsai/onsen` は、温泉地・源泉・施設・浴場・泉質・化学成分・匂い・飲泉・湯治場・位置・営業状態・歴史・情報源を統合し、**検索できるDB**から**AIが利用できるデータ基盤**までを構築するプロジェクトです。
 
 > Goal: 日本最大級の温泉DB → 日本一を検証できる温泉DB
 
@@ -24,6 +24,10 @@ source → observation → entity → latest → now → action
 - 公衆浴場
 - 浴槽・浴場
 - 泉質
+- 化学成分
+- 匂い
+- 飲泉
+- 湯治場
 - 温度
 - 湧出量
 - 地理情報
@@ -69,6 +73,10 @@ spring
 facility
 bath
 quality
+chemistry
+odor
+drinking
+toji
 source
 observation
 ```
@@ -88,6 +96,115 @@ observation
 
 これにより現在値・最新値・過去値・変更履歴・情報源を同時に保持できます。
 
+### Chemistry
+
+化学成分は独立した観測データとして保持します。
+
+```json
+{
+  "spring_id": "spring:xxx",
+  "substance": "hydrogen_sulfide",
+  "name_ja": "硫化水素",
+  "concentration": 12.4,
+  "unit": "mg/L",
+  "observed_at": "2026-09-25",
+  "source_id": "source:xxx"
+}
+```
+
+候補項目:
+- 硫化水素
+- 総硫黄
+- ナトリウム
+- カルシウム
+- マグネシウム
+- 塩化物
+- 硫酸塩
+- 炭酸水素塩
+- 二酸化炭素
+- 鉄
+- メタケイ酸
+- メタホウ酸
+- ラドン
+- pH
+- 電気伝導度
+
+### Odor
+
+匂いは、統制語彙と自由記述を分離します。
+
+```yaml
+odor:
+  category: sulfur
+  intensity:
+  descriptor:
+  method:
+  observed_at:
+  source_id:
+```
+
+候補カテゴリ:
+`sulfur`, `chlorine`, `iron`, `petroleum`, `organic`, `earthy`, `mineral`, `none`, `other`
+
+化学成分と匂いを別Entity/Observationとして持つことで、将来的に**成分 ↔ 匂いの相関分析**が可能になります。
+
+### Drinking / 飲泉
+
+飲泉は「公式に飲泉可能か」と「化学的な可能性」を混同しません。
+
+```yaml
+drinking:
+  official_status: permitted
+  evidence:
+    source_id:
+  observed_at:
+```
+
+`official_status`:
+- `permitted` — 飲泉可
+- `prohibited` — 飲泉不可
+- `restricted` — 条件付き
+- `unknown` — 不明
+
+化学成分だけからAIが飲泉可否を推定するのではなく、公式情報・濃度・条件・施設案内等の根拠を保持します。
+
+### Toji / 湯治場
+
+**湯治場は温泉地・施設とは別の利用文化Entity**として扱います。
+
+```yaml
+toji:
+  status: active
+  tradition:
+  purpose:
+  stay_type:
+  treatment:
+  historical_period:
+  duration:
+  facilities:
+  source_id:
+  observed_at:
+```
+
+`status`:
+- `active` — 現在も湯治場として利用
+- `historical` — 歴史的湯治場
+- `seasonal` — 季節営業・季節湯治
+- `revival` — 復興・再生型
+- `unknown` — 不明
+
+これにより、現在の湯治場だけでなく**歴史的な湯治場・湯治文化**も同じDBで記録できます。
+
+```
+温泉地 (resort)
+   └── 湯治場 (toji)
+          ├── 源泉
+          ├── 宿
+          ├── 浴場
+          ├── 滞在形態
+          └── 歴史
+```
+
 ## Canonical Data
 
 データ交換の中心は **JSONL** とします。
@@ -101,6 +218,10 @@ data/
 ├── facilities.jsonl
 ├── baths.jsonl
 ├── qualities.jsonl
+├── chemistry.jsonl
+├── odors.jsonl
+├── drinking.jsonl
+├── toji.jsonl
 ├── sources.jsonl
 └── observations.jsonl
 ```
@@ -190,6 +311,10 @@ GET /springs
 GET /facilities
 GET /baths
 GET /qualities
+GET /chemistry
+GET /odors
+GET /drinking
+GET /toji
 GET /observations
 GET /sources
 GET /nearby
@@ -216,6 +341,10 @@ search_onsen
 get_onsen
 search_spring
 search_facility
+search_toji
+search_chemistry
+search_odor
+search_drinking
 nearby_onsen
 get_history
 get_source
@@ -273,6 +402,10 @@ GitHub Pages等でJSON-firstの探索画面を提供します。
 - 源泉
 - 施設
 - 泉質
+- 化学成分
+- 匂い
+- 飲泉
+- 湯治場
 - 温度
 - 湧出量
 - 更新履歴
@@ -291,6 +424,7 @@ coverage:
   springs:
   facilities:
   baths:
+  toji_sites:
 
 quality:
   provenance:
