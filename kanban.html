@@ -1,0 +1,113 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>onsen PM Kanban</title>
+<style>
+:root{color-scheme:dark;font-family:system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}
+*{box-sizing:border-box}body{margin:0;background:#0b0d10;color:#e9edf1}
+header{position:sticky;top:0;z-index:5;padding:18px 22px;background:#11151a;border-bottom:1px solid #252b33}
+h1{margin:0 0 5px;font-size:22px}header p{margin:0;color:#8f9aa6;font-size:13px}
+.toolbar{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-top:14px}
+button,input{background:#171c22;color:#e9edf1;border:1px solid #303842;border-radius:7px;padding:8px 10px}
+button{cursor:pointer}button:hover{background:#202731}
+#stats{margin-left:auto;color:#8f9aa6;font-size:12px}
+main{display:grid;grid-template-columns:repeat(5,minmax(230px,1fr));gap:12px;padding:16px;min-height:calc(100vh - 145px);overflow:auto}
+.column{background:#11151a;border:1px solid #252b33;border-radius:10px;min-height:400px}
+.column h2{font-size:14px;margin:0;padding:12px;border-bottom:1px solid #252b33}
+.count{color:#7f8b97;font-weight:400}
+.cards{padding:9px;display:flex;flex-direction:column;gap:8px}
+.card{display:block;background:#171c22;border:1px solid #2a313a;border-radius:8px;padding:11px;text-decoration:none;color:inherit}
+.card:hover{border-color:#657180}
+.num{font-size:11px;color:#7f8b97}.title{margin:4px 0 8px;font-size:13px;line-height:1.4}
+.meta{display:flex;gap:5px;flex-wrap:wrap}.tag{font-size:10px;padding:3px 6px;border-radius:99px;background:#252c34;color:#aeb8c2}
+.phase{font-size:10px;color:#8fa7ba}.empty{padding:20px;color:#626d78;font-size:12px}
+@media(max-width:1100px){main{grid-template-columns:repeat(3,minmax(240px,1fr))}}
+@media(max-width:760px){main{grid-template-columns:1fr}}
+</style>
+</head>
+<body>
+<header>
+  <h1>♨ onsen PM Kanban</h1>
+  <p>GitHub Issues → project management view · GH is canon</p>
+  <div class="toolbar">
+    <input id="q" placeholder="検索…">
+    <button id="refresh">Refresh</button>
+    <a id="github" href="https://github.com/bonsai/onsen/issues" target="_blank" rel="noopener"><button>GitHub Issues</button></a>
+    <span id="stats">loading…</span>
+  </div>
+</header>
+<main id="board"></main>
+<script>
+const OWNER="bonsai",REPO="onsen";
+const COLUMNS=[
+  ["backlog","Backlog"],["ready","Ready"],["doing","Doing"],["review","Review"],["done","Done"]
+];
+// Current roadmap is the default PM ordering. This is deliberately data-driven;
+// adding a status:* label later automatically overrides the fallback.
+const PHASES={
+  31:"Runtime",26:"Runtime",27:"Runtime",28:"Runtime",30:"Runtime",29:"Runtime",
+  1:"Data",2:"Data",3:"Data",4:"Data",5:"Data",6:"Data",13:"Data",
+  8:"Interface",9:"Interface",10:"Interface",11:"Interface",12:"Interface",
+  14:"Growth",15:"Growth",16:"Growth",17:"Growth",18:"Growth",19:"Growth",
+  20:"Research",21:"Research",22:"Research",23:"Research",24:"Wild",25:"Wild",
+  32:"PM"
+};
+const ROADMAP=[32,31,26,27,28,30,29,1,2,3,4,5,6,13,8,9,10,11,12,14,15,16,17,18,19,20,21,22,23,24,25];
+
+function status(issue){
+  const labels=(issue.labels||[]).map(x=>(typeof x==="string"?x:x.name).toLowerCase());
+  const hit=labels.find(x=>x.startsWith("status:"));
+  if(hit)return hit.slice(7);
+  if(issue.state==="closed")return "done";
+  if(labels.includes("review"))return "review";
+  if(labels.includes("in progress")||labels.includes("doing"))return "doing";
+  if(labels.includes("ready"))return "ready";
+  return "backlog";
+}
+function phase(issue){return PHASES[issue.number]||"Other"}
+function card(issue){
+  const a=document.createElement("a");
+  a.className="card";a.href=issue.html_url; a.target="_blank";a.rel="noopener";
+  const labels=(issue.labels||[]).slice(0,4).map(x=>`<span class="tag">${esc(typeof x==="string"?x:x.name)}</span>`).join("");
+  a.innerHTML=`<div class="num">#${issue.number} · ${esc(phase(issue))}</div>
+    <div class="title">${esc(issue.title)}</div><div class="meta">${labels}</div>`;
+  return a;
+}
+function esc(s){return String(s).replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]))}
+
+async function load(){
+  const board=document.getElementById("board"),q=document.getElementById("q").value.trim().toLowerCase();
+  board.innerHTML=COLUMNS.map(([k,n])=>`<section class="column" data-col="${k}"><h2>${n} <span class="count">0</span></h2><div class="cards"></div></section>`).join("");
+  try{
+    let all=[];
+    for(let page=1;page<=3;page++){
+      const r=await fetch(`https://api.github.com/repos/${OWNER}/${REPO}/issues?state=all&per_page=100&page=${page}`,{headers:{"Accept":"application/vnd.github+json"}});
+      if(!r.ok)throw new Error("GitHub API "+r.status);
+      const xs=await r.json(); all.push(...xs.filter(x=>!x.pull_request));
+      if(xs.length<100)break;
+    }
+    const known=new Map(all.map(x=>[x.number,x]));
+    const ordered=[...ROADMAP.filter(n=>known.has(n)).map(n=>known.get(n)),...all.filter(x=>!ROADMAP.includes(x.number)).sort((a,b)=>b.number-a.number)];
+    let visible=0;
+    for(const issue of ordered){
+      if(q&&!((issue.title+" "+issue.number+" "+phase(issue)).toLowerCase().includes(q)))continue;
+      const key=COLUMNS.some(x=>x[0]===status(issue))?status(issue):"backlog";
+      const col=board.querySelector(`[data-col="${key}"] .cards`);
+      col.appendChild(card(issue));
+      visible++;
+    }
+    board.querySelectorAll(".column").forEach(x=>x.querySelector(".count").textContent=x.querySelectorAll(".card").length);
+    document.getElementById("stats").textContent=`${visible} issues · updated ${new Date().toLocaleTimeString("ja-JP")}`;
+  }catch(e){
+    board.innerHTML=`<section class="column" style="grid-column:1/-1"><h2>Load error</h2><div class="empty">${esc(e.message)}<br>GitHub API のレート制限・ネットワークを確認してください。</div></section>`;
+    document.getElementById("stats").textContent="error";
+  }
+}
+document.getElementById("refresh").onclick=load;
+document.getElementById("q").oninput=load;
+load();
+</script>
+</body>
+</html>
