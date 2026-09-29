@@ -1,0 +1,7 @@
+{
+  "hosting": {
+    "public": "web",
+    "ignore": ["firebase.json", "**/.*", "**/node_modules/**"],
+    "rewrites": [{"source": "/api/**", "run": {"serviceId": "onsen-api", "region": "asia-northeast1"}}]
+  }
+}
