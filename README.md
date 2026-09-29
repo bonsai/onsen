@@ -507,3 +507,46 @@ onsen/
 **GH is canon.**
 
 Issue → implementation → workflow evidence → data → docs の順で、DBを継続的に成長させます。
+
+
+## Runtime Architecture (2026-09)
+
+Public FEはFirebase Hosting、BEはCloud Run上のDjango API-only構成です。Firebase HostingからCloud Runへのrewriteも利用できます。
+
+```text
+Firebase Hosting
+  ├─ web UI / map / mic
+  └─ Firebase Auth
+          │ REST / OpenAPI
+          ▼
+Cloud Run
+  └─ Django API-only
+      ├─ health / version
+      ├─ agent
+      ├─ GCS audio
+      └─ BigQuery observation
+```
+
+- Django Template UIは作らない
+- Django Adminは内部運用用として追加可能
+- OpenAPIをFE/BEのcanonical contractにする
+- Cloud Runはscale-to-zero前提
+- Deepgram → Sakura AI → BigQueryなど長時間処理はasync化する
+- 音声本体はGCS、GitHubには保存しない
+- NeonはPostgreSQL secondary/fallbackとして扱う
+
+### Deployment
+
+GitHub ActionsからCloud RunとFirebase Hostingを順にdeployします。
+
+Required repository variables:
+- GCP_PROJECT_ID
+- GCP_WIF_PROVIDER
+- GCP_SERVICE_ACCOUNT
+
+Cloud Run service: onsen-api
+Region: asia-northeast1
+
+Firebase Hostingは静的FEを配信し、/api/**をCloud Runへrewriteします。Firebase公式でもCloud RunをREST API/microserviceのbackendとしてFirebase Hostingと組み合わせる構成が案内されています。
+
+`gcloud run deploy --source django` を使うため、ローカルDocker buildは必須ではありません。
