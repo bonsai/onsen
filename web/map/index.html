@@ -1,0 +1,43 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>野湯MAP — bonsai/onsen</title>
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+<style>
+html,body,#map{height:100%;margin:0}body{font-family:system-ui,-apple-system,"Noto Sans JP",sans-serif}
+#panel{position:fixed;z-index:1000;top:16px;left:16px;background:#fff;padding:14px 16px;border-radius:12px;box-shadow:0 4px 20px #0002;max-width:320px}
+h1{font-size:20px;margin:0 0 4px}.muted{color:#666;font-size:12px}
+select{margin-top:10px;padding:7px;border-radius:8px;border:1px solid #ccc;width:100%}
+.popup h3{margin:0 0 6px}.popup dl{margin:0}.popup dt{font-weight:700;display:inline}.popup dd{display:inline;margin:0 0 0 4px}
+</style>
+</head>
+<body>
+<div id="panel"><h1>♨ 野湯 MAP</h1><div class="muted">bonsai/onsen · demo</div><select id="status"><option value="">すべて</option><option>active</option><option>seasonal</option><option>dry</option><option>unknown</option><option>closed</option><option>historical</option></select></div>
+<div id="map"></div>
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script>
+const map=L.map('map').setView([36.2,138.3],5);
+L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{attribution:'© OpenStreetMap contributors'}).addTo(map);
+let rows=[],markers=[];
+function draw(){
+  markers.forEach(m=>m.remove()); markers=[];
+  const status=document.querySelector('#status').value;
+  rows.filter(r=>r.lat&&r.lng&&(!status||r.status===status)).forEach(r=>{
+    const m=L.marker([r.lat,r.lng]).addTo(map);
+    m.bindPopup('<div class="popup"><h3>'+esc(r.name)+'</h3><dl>'+
+      '<dt>場所</dt><dd>'+esc(r.prefecture||'')+' '+esc(r.municipality||'')+'</dd><br>'+
+      '<dt>状態</dt><dd>'+esc(r.status||'unknown')+'</dd><br>'+
+      '<dt>温度</dt><dd>'+(r.water_temperature_c??'—')+' ℃</dd><br>'+
+      '<dt>位置精度</dt><dd>'+esc(r.location_precision||'unknown')+'</dd><br>'+
+      '<dt>信頼度</dt><dd>'+esc(r.confidence||'unknown')+'</dd></dl></div>');
+    markers.push(m);
+  });
+}
+function esc(v){return String(v).replace(/[&<>"']/g,s=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[s]))}
+fetch('../data/wild_springs.jsonl').then(r=>r.text()).then(t=>{rows=t.trim().split('\n').filter(Boolean).map(JSON.parse);draw()});
+document.querySelector('#status').addEventListener('change',draw);
+</script>
+</body>
+</html>
